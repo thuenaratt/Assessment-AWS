@@ -1,0 +1,499 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: 'MediaWiki Deployment in AWS using CloudFormation'
+
+Parameters:
+  AllowedIP:
+    Type: String
+    Description: 'IP address range allowed to access the website (CIDR notation)'
+    Default: '0.0.0.0/0'
+  # ECSAMI:
+  #   Description: The Amazon Machine Image ID used for the cluster
+  #   Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+  #   Default: /aws/service/ecs/optimized-ami/amazon-linux-2023/arm64/recommended/image_id
+  
+Resources:
+  DemoVPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      # For CidrBlock can at to parameters
+      CidrBlock: '10.0.0.0/16'
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      InstanceTenancy: default
+      Tags:
+        - Key: 'Name'
+          Value: 'demo-vpc'
+
+  PublicSubnet:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: 
+        Ref: DemoVPC
+      CidrBlock: '10.0.20.0/24'
+      AvailabilityZone: 'us-west-2a'
+      Tags:
+        - Key: 'Name'
+          Value: 'PublicSubnet'        
+
+  AppSubnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: 
+        Ref: DemoVPC
+      CidrBlock: '10.0.24.0/24'
+      AvailabilityZone: 'us-west-2a'
+      Tags:
+        - Key: 'Name'
+          Value: 'app-subnet1'
+
+  AppSubnet2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: 
+        Ref: DemoVPC
+      CidrBlock: '10.0.25.0/24'
+      AvailabilityZone: 'us-west-2b'
+      Tags:
+        - Key: 'Name'
+          Value: 'app-subnet2'
+
+  AppSubnet3:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: 
+        Ref: DemoVPC
+      CidrBlock: '10.0.26.0/24'
+      AvailabilityZone: 'us-west-2c'
+      Tags:
+        - Key: 'Name'
+          Value: 'app-subnet3' 
+
+  PrivateSubnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: 
+        Ref: DemoVPC
+      CidrBlock: '10.0.27.0/24'
+      AvailabilityZone: 'us-west-2a'
+      Tags:
+        - Key: 'Name'
+          Value: 'private-subnet1'
+
+  PrivateSubnet2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: 
+        Ref: DemoVPC
+      CidrBlock: '10.0.28.0/24'
+      AvailabilityZone: 'us-west-2b'
+      Tags:
+        - Key: 'Name'
+          Value: 'private-subnet2'
+
+  PrivateSubnet3:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: 
+        Ref: DemoVPC
+      CidrBlock: '10.0.29.0/24'
+      AvailabilityZone: 'us-west-2c'
+      Tags:
+        - Key: 'Name'
+          Value: 'private-subnet3'
+
+  Pubsubnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: 
+        Ref: DemoVPC
+      CidrBlock: '10.0.21.0/24'
+      AvailabilityZone: 'us-west-2a'
+      Tags:
+        - Key: 'Name'
+          Value: 'pub-subnet1'
+
+  Pubsubnet2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: 
+        Ref: DemoVPC
+      CidrBlock: '10.0.22.0/24'
+      AvailabilityZone: 'us-west-2b'
+      Tags:
+        - Key: 'Name'
+          Value: 'pub-subnet2'        
+  
+  Pubsubnet3:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: 
+        Ref: DemoVPC
+      CidrBlock: '10.0.23.0/24'
+      AvailabilityZone: 'us-west-2c'
+      Tags:
+        - Key: 'Name'
+          Value: 'pub-subnet3' 
+
+  PrivateSubnetGroup:
+    Type: 'AWS::RDS::DBSubnetGroup'
+    Properties:
+      DBSubnetGroupDescription: 'Subnet group for Aurora DB'
+      SubnetIds:
+        - Ref: PrivateSubnet1
+        - Ref: PrivateSubnet2
+        - Ref: PrivateSubnet3
+       
+  CreateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: DemoVPC
+      Tags: 
+        - Key: Name
+          Value: demo-public-route-table
+        - Key: Application
+          Value: 
+            Ref: 'AWS::StackName'
+
+  SubnetAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId:
+        Ref: PublicSubnet
+      RouteTableId:
+        Ref: CreateRouteTable
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: DemoVPC
+      Tags: 
+        - Key: Name
+          Value: demo-private-route-table
+        - Key: Application
+          Value: 
+            Ref: 'AWS::StackName'
+
+  PrivateSubnetAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId:
+        Ref: AppSubnet1
+      RouteTableId:
+        Ref: PrivateRouteTable
+
+  PrivateSubnetAssociationArura:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId:
+        Ref: PrivateSubnet1
+      RouteTableId:
+        Ref: PrivateRouteTable                          
+
+  CreateInternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+        - Key: Name
+          Value: igw-demo
+        - Key: Application
+          Value:
+            Ref: 'AWS::StackName'
+  
+  Vpctoigw:
+    Type: 'AWS::EC2::VPCGatewayAttachment'  
+    Properties:
+      VpcId:
+        Ref: DemoVPC
+      InternetGatewayId: 
+        Ref: CreateInternetGateway 
+
+  MyRoutes:
+    Type: 'AWS::EC2::Route'
+    DependsOn: Vpctoigw
+    Properties:
+      RouteTableId: 
+        Ref: CreateRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: 
+        Ref: CreateInternetGateway
+
+  NatGateWayEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  NatGateWay:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId:
+        Fn::GetAtt: 
+          - "NatGateWayEIP"
+          - "AllocationId"
+      SubnetId: 
+        Ref: PublicSubnet
+      Tags:
+        - Key: Name
+          Value: my-nat-gateway
+        - Key: Application
+          Value: 
+            Ref: 'AWS::StackName'     
+
+  NatGateWayRoute:    
+    DependsOn: NatGateWay
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: PrivateRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId:
+        Ref: NatGateWay 
+
+  NLBTargetGroup:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      Name: ec2targetgroup
+      Protocol: TCP
+      Port: 80
+      HealthCheckIntervalSeconds: 10
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 3
+      UnhealthyThresholdCount: 2
+      HealthCheckProtocol: 'TCP'
+      VpcId: 
+        Ref: DemoVPC 
+      # Targets:
+      #   - Id: 
+      #       Ref: PrivateEC2Instance 
+            # Port: 80  # Specify the port for the target
+      TargetType: instance
+
+  NLBListener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    DependsOn: NLB
+    Properties:
+      DefaultActions:
+        - Type: 'forward'
+          TargetGroupArn: 
+            Ref: NLBTargetGroup
+      LoadBalancerArn: 
+        Ref: NLB
+      Port: 80
+      Protocol: 'TCP'
+
+  NLB:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    DependsOn: NLBTargetGroup
+    Properties:
+      Name: my-load-balancer
+      Subnets:
+        - Ref: PublicSubnet
+        # - Ref: AppSubnet2
+      SecurityGroups:
+        - Ref: NLBSecurityGroup
+      Scheme: 'internet-facing'
+      Type: network
+
+
+  NLBSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      VpcId: 
+        Ref: DemoVPC
+      GroupDescription: 'Security group for the NLB'
+      SecurityGroupIngress:
+        - CidrIp: 
+            Ref: AllowedIP
+          IpProtocol: 'TCP'
+          FromPort: 80
+          ToPort: 80
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0  
+
+  AuroraDBCluster:
+    Type: 'AWS::RDS::DBCluster'
+    Properties:
+      Engine: aurora-mysql
+      MasterUsername: admin
+      MasterUserPassword: '11223344'
+      DatabaseName: wiki_db
+      # VpcSecurityGroups: 
+      AvailabilityZones:
+        - 'us-west-2a'
+        # - 'us-west-2b'
+        # - 'us-west-2c'
+      DBSubnetGroupName:
+        Ref: PrivateSubnetGroup
+
+  RDSDBInstance1:
+    Type: 'AWS::RDS::DBInstance'
+    Properties:
+      # DBParameterGroupName:
+      #   Ref: PrivateSubnetGroup
+      Engine: aurora-mysql
+      DBClusterIdentifier:
+        Ref: AuroraDBCluster
+      PubliclyAccessible: 'true'
+      DBInstanceClass: db.t3.medium      
+        
+
+  ECSCluster:
+    Type: 'AWS::ECS::Cluster'
+    Properties:
+      ClusterName: my-ecs-cluster
+
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow connections from specified CIDR ranges
+      VpcId: 
+        Ref: DemoVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: 
+            Ref: NLBSecurityGroup
+
+  myLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties: 
+      LaunchTemplateName: myLaunchTemplate
+      LaunchTemplateData:
+        KeyName: 'mykeypair' 
+        NetworkInterfaces:
+          - DeviceIndex: 0
+            AssociatePublicIpAddress: yes
+            DeleteOnTermination: yes
+            Groups:
+              - Ref: InstanceSecurityGroup 
+        ImageId: ami-06ebbcdf40f9949e7
+        InstanceType: 't2.micro'
+        IamInstanceProfile: 
+          Arn: 
+            Fn::Sub: arn:aws:iam::${AWS::AccountId}:instance-profile/ecsInstanceRole
+        # # SecurityGroupIds:
+        #   - Ref: NLBSecurityGroup
+        UserData:
+          Fn::Base64: 
+            Fn::Sub: |
+              #!/bin/bash
+              echo ECS_CLUSTER=${ECSCluster} >> /etc/ecs/ecs.config
+
+  ECSAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    DependsOn:
+      - ECSCluster
+    Properties:
+      LaunchTemplate: 
+        LaunchTemplateId: !Ref myLaunchTemplate
+        Version: 
+          Fn::GetAtt: myLaunchTemplate.LatestVersionNumber
+      MinSize: '1'
+      MaxSize: '5'
+      DesiredCapacity: '1'
+      VPCZoneIdentifier:
+        - Ref: AppSubnet1
+      NewInstancesProtectedFromScaleIn: true    
+
+  CapacityProvider:
+    Type: AWS::ECS::CapacityProvider
+    Properties:
+      AutoScalingGroupProvider:
+        AutoScalingGroupArn: 
+          Ref: ECSAutoScalingGroup
+        ManagedScaling:
+            InstanceWarmupPeriod: 60
+            MinimumScalingStepSize: 1
+            MaximumScalingStepSize: 100
+            Status: ENABLED
+            # Percentage of cluster reservation to try to maintain
+            TargetCapacity: 100
+        # ManagedTerminationProtection: DISABLED
+        # ManagedDraining: ENABLED    
+
+  CapacityProviderAssociation:
+    Type: AWS::ECS::ClusterCapacityProviderAssociations
+    Properties:
+      CapacityProviders:
+        - Ref: CapacityProvider
+      Cluster: 
+        Ref: ECSCluster
+      DefaultCapacityProviderStrategy:
+        - Base: 0
+          CapacityProvider: 
+            Ref: CapacityProvider
+          Weight: 1 
+            
+  ECSTaskDefinition:
+    Type: 'AWS::ECS::TaskDefinition'
+    Properties:
+      Family: mediawiki-task
+      Cpu: 512
+      Memory: 512
+      NetworkMode: bridge
+      RuntimePlatform:
+        CpuArchitecture: x86_64
+        OperatingSystemFamily: LINUX
+      RequiresCompatibilities:
+        - EC2
+      ExecutionRoleArn: 'arn:aws:iam::356895670719:role/ecsTaskExecutionRole'
+      ContainerDefinitions:
+        - Name: mediawiki
+          Image: mediawiki:latest
+          PortMappings:
+            - ContainerPort: 80
+              Protocol: tcp
+              HostPort: 80
+          Essential: true
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: firelens-container 
+              awslogs-region: !Sub "${AWS::Region}"
+              awslogs-stream-prefix: ecs
+
+  ECSService:
+    Type: 'AWS::ECS::Service'
+    DependsOn: NLBListener
+    Properties:
+      Cluster: 
+        Ref: ECSCluster
+      # CapacityProviderStrategy:
+      #   Base: 0
+      #   CapacityProvider: 
+      #     Ref: CapacityProvider  
+      #   Weight: 1
+      LaunchType: EC2
+      TaskDefinition: 
+        Ref: ECSTaskDefinition
+      SchedulingStrategy: "REPLICA"  
+      LoadBalancers:
+        - ContainerName: mediawiki
+          ContainerPort: 80
+          # LoadBalancerName: 
+          #   Ref: NLB
+          TargetGroupArn: 
+            Ref: NLBTargetGroup
+          # TargetGroupArn: 'arn:aws:elasticloadbalancing:REGION:ACCOUNT_ID:targetgroup/TARGET_GROUP_NAME/TARGET_GROUP_ID'
+      ServiceName: ecs-service
+      
+          
+Outputs:
+  NLBEndpoint:
+    Description: The DNS name for the NLB
+    Value: 
+      Fn::GetAtt:
+        - "NLB"
+        - "DNSName"
+    Export:
+      Name: NLBEndpoint
+
+  # ECSTaskDefinition:
+  #   Description: The created Taskdefinition.
+  #   Value: 
+  #     Ref: ECSTaskDefinition      
+  
