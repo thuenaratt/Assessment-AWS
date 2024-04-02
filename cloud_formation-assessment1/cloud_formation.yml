@@ -1,0 +1,246 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'MediaWiki Deployment in AWS using CloudFormation'
+
+Parameters:
+  AllowedIP:
+    Type: String
+    Description: 'IP address range allowed to access the website (CIDR notation)'
+    Default: '0.0.0.0/0'
+
+Resources:
+  DemoVPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: '10.0.0.0/16'
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      InstanceTenancy: default
+      Tags:
+        - Key: 'Name'
+          Value: 'demo-vpc'
+
+  AppSubnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: 
+        Ref: DemoVPC
+      CidrBlock: '10.0.24.0/24'
+      AvailabilityZone: 'us-west-2a'
+      Tags:
+        - Key: 'Name'
+          Value: 'app-subnet1'
+
+  AppSubnet2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: 
+        Ref: DemoVPC
+      CidrBlock: '10.0.25.0/24'
+      AvailabilityZone: 'us-west-2b'
+      Tags:
+        - Key: 'Name'
+          Value: 'app-subnet2'
+
+  AppSubnet3:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: 
+        Ref: DemoVPC
+      CidrBlock: '10.0.26.0/24'
+      AvailabilityZone: 'us-west-2c'
+      Tags:
+        - Key: 'Name'
+          Value: 'app-subnet3'        
+
+  CreateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: DemoVPC
+      Tags: 
+        - Key: Name
+          Value: demo-public-route-table
+        - Key: Application
+          Value: 
+            Ref: 'AWS::StackName'
+
+  CreateInternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+        - Key: Name
+          Value: igw-demo
+        - Key: Application
+          Value:
+            Ref: 'AWS::StackName'
+  
+  Vpctoigw:
+    Type: 'AWS::EC2::VPCGatewayAttachment'  
+    Properties:
+      VpcId:
+        Ref: DemoVPC
+      InternetGatewayId: 
+        Ref: CreateInternetGateway 
+
+  MyRoutes:
+    Type: 'AWS::EC2::Route'
+    DependsOn: Vpctoigw
+    Properties:
+      RouteTableId: 
+        Ref: CreateRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: 
+        Ref: CreateInternetGateway
+
+  NatGateWay:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId:
+        GetAtt: NatGateWayEIP.AllocationId
+      SubnetId: 
+        Ref: AppSubnet1
+      Tags:
+        - Key: Name
+          Value: my-nat-gateway
+        - Key: Application
+          Value: 
+            Ref: 'AWS::StackName'     
+
+  NatGateWayEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  NatGateWayRoute:    
+    DependsOn: NatGateWay
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: CreateRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGateWayId:
+        Ref: NatGateWay 
+
+  LoadBalancer:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      Name: my-load-balancer
+      Subnets:
+        - Ref: AppSubnet1
+        - Ref: AppSubnet2
+        - Ref: AppSubnet3
+      SecurityGroups:
+        - Ref: EC2SecurityGroup
+      Scheme: internal
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: '60'
+      Tags:
+        - Key: Name
+          Value: my-load-balancer
+        - Key: Application
+          Value:
+            Ref: 'AWS::StackName'
+
+  TargetGroup:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      Name: my-target-group
+      Port: 80
+      Protocol: TCP
+      VpcId: 
+        Ref: DemoVPC
+      TargetType: instance
+
+  LoadBalancerListener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+        - Type: fixed-response
+          FixedResponseConfig:
+            ContentType: text/plain
+            StatusCode: 200
+            ContentType: 'text/html'
+            Content: 'OK'
+      LoadBalancerArn: 
+        Ref: LoadBalancer
+      Port: 80
+      Protocol: TCP
+      DefaultActions:
+        - TargetGroupArn: 
+            Ref: TargetGroup
+          Type: forward
+
+  EC2Instance:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      ImageId: 'ami-08f7912c15ca96832'  # Ubuntu 20.04 LTS AMI ID
+      InstanceType: 't2.micro'
+      KeyName: 
+        Ref: NewKeyPair
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeviceIndex: '0'
+          SubnetId: 
+            Ref: AppSubnet1      
+          GroupSet:
+            - Ref: EC2SecurityGroup
+      UserData:
+        Fn::Base64: 
+          Fn::Sub: |
+            #!/bin/bash
+            sudo apt update
+            yes | sudo apt install docker-ce
+            yes | sudo apt install docker-compose 
+            sudo systemctl start docker
+            sudo systemctl enable docker
+            sudo docker --version 
+            sudo mkdir -p /opt/mediawiki-data
+            cat <<EOF | sudo tee /opt/docker-compose.yml
+            version: '3'
+            services:
+              mediawiki:
+                image: mediawiki
+                restart: always
+                networks:
+                  - docker_network
+                ports:
+                  - 80:80
+                volumes:
+                  - /var/www/html/
+                  
+              database:
+                image: mysql:5.7
+                restart: always
+                networks:
+                  - docker_network
+                environment:
+                  MYSQL_DATABASE: wiki_db
+                  MYSQL_ROOT_PASSWORD: root
+                  MYSQL_USER: wikimedia
+                  MYSQL_PASSWORD: wikimedia
+                volumes:
+                  - /var/lib/mysql
+            networks:
+              docker_network:
+                driver: bridge
+            EOF
+            sudo docker-compose -f /opt/docker-compose.yml up -d
+            
+  EC2SecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      VpcId: 
+        Ref: DemoVPC
+      GroupDescription: 'Security group for the EC2 instance'
+      SecurityGroupIngress:
+        - CidrIp: 
+            Ref: AllowedIP
+          IpProtocol: 'tcp'
+          FromPort: 80
+          ToPort: 80
+        - CidrIp: 
+            Ref: AllowedIP
+          IpProtocol: 'tcp'
+          FromPort: 20
+          ToPort: 20

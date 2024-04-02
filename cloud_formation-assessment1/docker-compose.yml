@@ -1,0 +1,28 @@
+version: '3'
+services:
+  mediawiki:
+    image: mediawiki
+    restart: always
+    networks:
+      - docker_network
+    ports:
+      - 8080:80
+    volumes:
+      - /var/www/html/
+
+  database:
+    image: mysql:5.7
+    restart: always
+    networks:
+      - docker_network
+    environment:
+      MYSQL_DATABASE: wiki_db
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_USER: wikimedia
+      MYSQL_PASSWORD: wikimedia
+    volumes:
+      - /var/lib/mysql
+networks:
+  docker_network:
+    driver: bridge
+
