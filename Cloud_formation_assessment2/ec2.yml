@@ -1,0 +1,403 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'MediaWiki Deployment in AWS using CloudFormation'
+
+Parameters:
+  AllowedIP:
+    Type: String
+    Description: 'IP address range allowed to access the website (CIDR notation)'
+    Default: '0.0.0.0/0'
+
+Resources:
+  DemoVPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      # For CidrBlock can at to parameters
+      CidrBlock: '10.0.0.0/16'
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      InstanceTenancy: default
+      Tags:
+        - Key: 'Name'
+          Value: 'demo-vpc'
+
+  PublicSubnet:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: 
+        Ref: DemoVPC
+      CidrBlock: '10.0.20.0/24'
+      AvailabilityZone: 'us-west-2a'
+      Tags:
+        - Key: 'Name'
+          Value: 'PublicSubnet'        
+
+  AppSubnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: 
+        Ref: DemoVPC
+      CidrBlock: '10.0.24.0/24'
+      AvailabilityZone: 'us-west-2a'
+      Tags:
+        - Key: 'Name'
+          Value: 'app-subnet1'
+
+  AppSubnet2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: 
+        Ref: DemoVPC
+      CidrBlock: '10.0.25.0/24'
+      AvailabilityZone: 'us-west-2b'
+      Tags:
+        - Key: 'Name'
+          Value: 'app-subnet2'
+
+  AppSubnet3:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: 
+        Ref: DemoVPC
+      CidrBlock: '10.0.26.0/24'
+      AvailabilityZone: 'us-west-2c'
+      Tags:
+        - Key: 'Name'
+          Value: 'app-subnet3' 
+
+  PrivateSubnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: 
+        Ref: DemoVPC
+      CidrBlock: '10.0.27.0/24'
+      AvailabilityZone: 'us-west-2a'
+      Tags:
+        - Key: 'Name'
+          Value: 'private-subnet1'
+
+  PrivateSubnet2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: 
+        Ref: DemoVPC
+      CidrBlock: '10.0.28.0/24'
+      AvailabilityZone: 'us-west-2b'
+      Tags:
+        - Key: 'Name'
+          Value: 'private-subnet2'
+
+  PrivateSubnet3:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: 
+        Ref: DemoVPC
+      CidrBlock: '10.0.29.0/24'
+      AvailabilityZone: 'us-west-2c'
+      Tags:
+        - Key: 'Name'
+          Value: 'private-subnet3'
+
+  Pubsubnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: 
+        Ref: DemoVPC
+      CidrBlock: '10.0.21.0/24'
+      AvailabilityZone: 'us-west-2a'
+      Tags:
+        - Key: 'Name'
+          Value: 'pub-subnet1'
+
+  Pubsubnet2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: 
+        Ref: DemoVPC
+      CidrBlock: '10.0.22.0/24'
+      AvailabilityZone: 'us-west-2b'
+      Tags:
+        - Key: 'Name'
+          Value: 'pub-subnet2'        
+  
+  Pubsubnet3:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: 
+        Ref: DemoVPC
+      CidrBlock: '10.0.23.0/24'
+      AvailabilityZone: 'us-west-2c'
+      Tags:
+        - Key: 'Name'
+          Value: 'pub-subnet3' 
+
+  AuroraDBCluster:
+    Type: 'AWS::RDS::DBCluster'
+    Properties:
+      Engine: aurora-mysql
+      MasterUsername: admin
+      MasterUserPassword: '11223344'
+      DatabaseName: wiki_db
+      # VpcSecurityGroups: 
+      AvailabilityZones:
+        - 'us-west-2a'
+        # - 'us-west-2b'
+        # - 'us-west-2c'
+      DBSubnetGroupName:
+        Ref: PrivateSubnetGroup
+
+  RDSDBInstance1:
+    Type: 'AWS::RDS::DBInstance'
+    Properties:
+      # DBParameterGroupName:
+      #   Ref: PrivateSubnetGroup
+      Engine: aurora-mysql
+      DBClusterIdentifier:
+        Ref: AuroraDBCluster
+      PubliclyAccessible: 'true'
+      DBInstanceClass: db.t3.medium      
+
+  PrivateSubnetGroup:
+    Type: 'AWS::RDS::DBSubnetGroup'
+    Properties:
+      DBSubnetGroupDescription: 'Subnet group for Aurora DB'
+      SubnetIds:
+        - Ref: PrivateSubnet1
+        - Ref: PrivateSubnet2
+        - Ref: PrivateSubnet3
+       
+  CreateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: DemoVPC
+      Tags: 
+        - Key: Name
+          Value: demo-public-route-table
+        - Key: Application
+          Value: 
+            Ref: 'AWS::StackName'
+
+  SubnetAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId:
+        Ref: PublicSubnet
+      RouteTableId:
+        Ref: CreateRouteTable
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: DemoVPC
+      Tags: 
+        - Key: Name
+          Value: demo-private-route-table
+        - Key: Application
+          Value: 
+            Ref: 'AWS::StackName'
+
+  PrivateSubnetAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId:
+        Ref: AppSubnet1
+      RouteTableId:
+        Ref: PrivateRouteTable
+
+  PrivateSubnetAssociationArura:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId:
+        Ref: PrivateSubnet1
+      RouteTableId:
+        Ref: PrivateRouteTable                          
+
+  CreateInternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+        - Key: Name
+          Value: igw-demo
+        - Key: Application
+          Value:
+            Ref: 'AWS::StackName'
+  
+  Vpctoigw:
+    Type: 'AWS::EC2::VPCGatewayAttachment'  
+    Properties:
+      VpcId:
+        Ref: DemoVPC
+      InternetGatewayId: 
+        Ref: CreateInternetGateway 
+
+  MyRoutes:
+    Type: 'AWS::EC2::Route'
+    DependsOn: Vpctoigw
+    Properties:
+      RouteTableId: 
+        Ref: CreateRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: 
+        Ref: CreateInternetGateway
+
+  NatGateWayEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  NatGateWay:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId:
+        Fn::GetAtt: 
+          - "NatGateWayEIP"
+          - "AllocationId"
+      SubnetId: 
+        Ref: PublicSubnet
+      Tags:
+        - Key: Name
+          Value: my-nat-gateway
+        - Key: Application
+          Value: 
+            Ref: 'AWS::StackName'     
+
+  NatGateWayRoute:    
+    DependsOn: NatGateWay
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: PrivateRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId:
+        Ref: NatGateWay 
+
+  NLBTargetGroup:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      Name: ec2targetgroup
+      Protocol: TCP
+      Port: 80
+      HealthCheckIntervalSeconds: 10
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 3
+      UnhealthyThresholdCount: 2
+      HealthCheckProtocol: 'TCP'
+      VpcId: 
+        Ref: DemoVPC 
+      # Targets:
+      #   - Id: 
+      #       Ref: PrivateEC2Instance 
+            # Port: 80  # Specify the port for the target
+      TargetType: instance
+
+  NLBListener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    DependsOn: NLB
+    Properties:
+      DefaultActions:
+        - Type: 'forward'
+          TargetGroupArn: 
+            Ref: NLBTargetGroup
+      LoadBalancerArn: 
+        Ref: NLB
+      Port: 80
+      Protocol: 'TCP'
+
+  NLB:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    DependsOn: NLBTargetGroup
+    Properties:
+      Name: my-load-balancer
+      Subnets:
+        - Ref: PublicSubnet
+        # - Ref: AppSubnet2
+      SecurityGroups:
+        - Ref: NLBSecurityGroup
+      Scheme: 'internet-facing'
+      Type: network
+
+
+  NLBSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      VpcId: 
+        Ref: DemoVPC
+      GroupDescription: 'Security group for the NLB'
+      SecurityGroupIngress:
+        - CidrIp: 
+            Ref: AllowedIP
+          IpProtocol: 'TCP'
+          FromPort: 80
+          ToPort: 80
+  
+  PrivateEC2Instance:
+    Type: 'AWS::EC2::Instance'
+    DependsOn: NatGateWayRoute
+    Properties:
+      ImageId: 'ami-08f7912c15ca96832'  # Ubuntu 20.04 LTS AMI ID
+      InstanceType: 't2.micro'
+      KeyName: 'mykeypair'  # Use the existing key pair name
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeviceIndex: '0'
+          SubnetId: 
+            Ref: AppSubnet1    
+          GroupSet:
+            - Ref: NLBSecurityGroup
+      UserData:
+        Fn::Base64: 
+          Fn::Sub: |
+            #!/bin/bash
+            sudo apt update -y
+            yes | sudo apt install docker
+            yes | sudo apt install docker-compose 
+            sudo systemctl start docker
+            sudo systemctl enable docker
+
+            # Create a directory for MediaWiki data (adjust the path as needed)
+            sudo mkdir -p /opt/mediawiki-data
+
+            # Create a docker-compose.yml file for MediaWiki
+            cat <<EOF | sudo tee /opt/mediawiki-data/docker-compose.yml
+            version: '3'
+            services:
+              mediawiki:
+                image: mediawiki
+                restart: always
+                networks:
+                  - docker_network
+                ports:
+                  - 80:80
+                volumes:
+                  - /var/www/html/
+
+              database:
+                image: mysql:5.7
+                restart: always
+                networks:
+                  - docker_network
+                environment:
+                  MYSQL_DATABASE: wiki_db
+                  MYSQL_ROOT_PASSWORD: root
+                  MYSQL_USER: wikimedia
+                  MYSQL_PASSWORD: wikimedia
+                volumes:
+                  - /var/lib/mysql
+            networks:
+              docker_network:
+                driver: bridge
+            EOF
+            # Start the MediaWiki services
+            sudo docker-compose -f  /opt/mediawiki-data/docker-compose.yml up -d
+Outputs:
+  NLBEndpoint:
+    Description: The DNS name for the NLB
+    Value: 
+      Fn::GetAtt:
+        - "NLB"
+        - "DNSName"
+    Export:
+      Name: NLBEndpoint
+ 
+        
