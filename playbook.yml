@@ -1,0 +1,66 @@
+---
+- name: Create and run NGINX Docker containers on different distributions
+  hosts: nginx_servers
+  become: true
+  tasks:
+    - name: Install pip for Python 3
+      become: true
+      dnf:
+        name: python3-pip
+        state: present
+
+    - name: Install Docker 
+      become: true
+      pip:
+        name: docker
+        state: present
+        extra_args: "--no-deps --ignore-installed"
+    
+    - name: Install packaging module
+      become: true
+      pip:
+        name: packaging
+        state: present
+
+    - name: Pull NGINX Docker image
+      docker_image:
+        name: ubuntu:18.04
+
+    - name: Create and run NGINX Docker container
+      docker_container:
+        name: ubuntu_nginx_container
+        image: ubuntu:18.04  # Corrected the 'images' to 'image'
+        state: started
+        detach: true
+        tty: true
+        ports:
+          - "8081:80"
+
+    - name: Pull NGINX Docker image
+      docker_image:
+        name: centos:centos7
+    - name: Create and run NGINX Docker container on CentOS
+      docker_container:
+        name: centos_nginx_container
+        image: centos:centos7
+        state: started
+        detach: true
+        tty: true
+        ports:
+          - "8082:80"
+
+    - name: Debug task result
+      debug:
+        var: ansible_play_hosts  
+    - name: Pull NGINX Docker image
+      docker_image:
+        name: debian:latest
+    - name: Create and run NGINX Docker container on Debian
+      docker_container:
+        name: debian_nginx_container
+        image: debian:latest
+        state: started
+        detach: true
+        tty: true
+        ports:
+          - "8083:80"
