@@ -49,7 +49,7 @@ pipeline {
                 sh 'ansible-playbook -i inventory.ini deploy.yml'
             }
         }
-        stage('Notify Developer') {
+        stage('Notify alert') {
             steps {
                 sh 'curl -X POST -H "Content-Type: application/json" -d "{\"message\": \"Build and Deployment Completed\"}" http://your-telegram-bot-url'
             }
